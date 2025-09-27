@@ -5,6 +5,6 @@ buildCommand = "python -m pip install -r requirements.txt && python -m playwrigh
 [deploy]
 preDeployCommand = ["python -m playwright install"]
 startCommand = "python main.py"
-healthcheckPath = "/"
-healthcheckTimeout = 100
-restartPolicyType = "always"
+#healthcheckPath = "/"
+#healthcheckTimeout = 100
+#restartPolicyType = "always"
