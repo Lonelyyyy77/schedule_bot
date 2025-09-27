@@ -1,17 +1,70 @@
 import asyncio
 import os
+import time
+
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
 
 from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import CommandStart, Command
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
+from playwright.async_api import async_playwright
+
+
+class ScheduleStates(StatesGroup):
+    waiting_for_url = State()
+
+
+async def download_schedule(url: str, save_path: str) -> str:
+    from playwright.async_api import async_playwright
+    import asyncio
+    import os
+
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(headless=True)
+        page = await browser.new_page()
+        await page.goto(url)  # <-- используем url от пользователя
+
+        # Куки
+        try:
+            await page.click("button:has-text('Zezwól')")
+        except:
+            pass
+
+        # Радиокнопка "Cały semestr"
+        labels = await page.query_selector_all("label.custom-control-label")
+        for lbl in labels:
+            text = (await lbl.inner_text()).strip()
+            if text == "Cały semestr":
+                await lbl.click()
+                break
+
+        # Szukaj
+        await page.click("a#SzukajLogout")
+        await asyncio.sleep(40)
+
+        # Скачать CSV
+        async with page.expect_download() as download_info:
+            await page.locator("a[href*='WydrukTokuCsv']").click(no_wait_after=True)
+        download = await download_info.value
+        await download.save_as(save_path)
+
+        await browser.close()
+        return save_path
+
 
 # --- НАСТРОЙКИ ---
 BOT_TOKEN = '7353399540:AAHtYxx9ftGvs10iWXhvDSVPQgA4tDYKVEE'
 SCHEDULE_FILE = 'Plany.csv'
 logging.basicConfig(level=logging.INFO)
+
+USER_SCHEDULES_DIR = "user_schedules"
+
+if not os.path.exists(USER_SCHEDULES_DIR):
+    os.makedirs(USER_SCHEDULES_DIR)
 
 # --- ИНИЦИАЛИЗАЦИЯ ---
 bot = Bot(token=BOT_TOKEN)
@@ -71,7 +124,8 @@ def get_main_keyboard(user_id: int) -> InlineKeyboardMarkup:
          InlineKeyboardButton(text="🗓️ Завтра", callback_data="show_tomorrow")],
         [InlineKeyboardButton(text="📅 На этот месяц", callback_data="show_month"),
          InlineKeyboardButton(text="📅 На след месяц", callback_data="show_next_month")],
-        [InlineKeyboardButton(text=notif_text, callback_data="toggle_notifications")]
+        [InlineKeyboardButton(text=notif_text, callback_data="toggle_notifications")],
+        [InlineKeyboardButton(text="🔄 Обновить расписание", callback_data="update_schedule")]
     ])
 
 
@@ -298,6 +352,54 @@ async def show_schedule_callback(callback: types.CallbackQuery):
         )
 
 
+@dp.callback_query(lambda c: c.data == "update_schedule")
+async def process_update(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text("Вставь ссылку на расписание (из сайта универа):")
+    await state.set_state(ScheduleStates.waiting_for_url)
+
+
+# Получение ссылки
+@dp.message(ScheduleStates.waiting_for_url)
+async def get_schedule_url(message: types.Message, state: FSMContext):
+    url = message.text.strip()
+
+    # Отправляем одно сообщение, которое будем редактировать
+    status_message = await message.answer("⏳ Загружаю и обрабатываю расписание, подождите 1 минуту...")
+
+    try:
+        # Генерируем имя файла для пользователя
+        user_id = message.from_user.id
+        file_name = f"{user_id}.csv"
+        file_path = os.path.join(USER_SCHEDULES_DIR, file_name)
+
+        # Если файл уже существует, перезаписываем его
+        if os.path.exists(file_path):
+            os.remove(file_path)
+
+        # Скачиваем CSV через парсер
+        file_path = await download_schedule(url, file_path)
+
+        # Отправляем файл пользователю
+        # await message.answer_document(types.FSInputFile(file_path), caption="📁 Ваше расписание (CSV)")
+
+        # Обработка CSV (если нужно)
+        df = pd.read_csv(file_path, sep=";")  # уточни разделитель CSV, если нужно
+        print(df.head())  # можно добавить сохранение/обновление локальной БД
+
+        # Редактируем исходное сообщение, чтобы показать, что всё успешно
+        await status_message.edit_text(
+            "✅ Расписание успешно обновлено!",
+            reply_markup=get_main_keyboard(user_id)
+        )
+
+    except Exception as e:
+        # Редактируем исходное сообщение с текстом ошибки
+        await status_message.edit_text(f"❌ Ошибка при загрузке расписания:\n{e}")
+
+    await state.clear()
+
+
+
 @dp.callback_query(F.data == "toggle_notifications")
 async def toggle_notifications(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -328,7 +430,6 @@ async def navigate_day(callback: types.CallbackQuery):
 
     keyboard = get_day_navigation_keyboard(date, min_date, max_date)
     await callback.message.edit_text(text, reply_markup=keyboard)
-
 
 
 @dp.callback_query(F.data == 'main_menu')

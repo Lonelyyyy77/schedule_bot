@@ -17,17 +17,24 @@
             </Attribute>
           </value>
         </entry>
-        <entry key="\Plany.csv">
+        <entry key="\schedule.csv">
           <value>
             <Attribute>
-              <option name="separator" value=";" />
+              <option name="separator" value="," />
             </Attribute>
           </value>
         </entry>
-        <entry key="\user_schedules\6588562022.csv">
+        <entry key="\schedule123.csv">
           <value>
             <Attribute>
-              <option name="separator" value=";" />
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\schedule2.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
             </Attribute>
           </value>
         </entry>
