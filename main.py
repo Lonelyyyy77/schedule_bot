@@ -1,25 +1,20 @@
-import asyncio
 import os
-import time
-
+import asyncio
+from playwright.async_api import async_playwright
 import pandas as pd
 from datetime import datetime, timedelta
 import logging
 
 from aiogram import Bot, Dispatcher, types, F
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, Message
-from playwright.async_api import async_playwright
 
 
 class ScheduleStates(StatesGroup):
     waiting_for_url = State()
 
-
-import asyncio
-from playwright.async_api import async_playwright
 
 async def download_schedule(url: str, save_path: str) -> str:
     async with async_playwright() as p:
@@ -86,6 +81,8 @@ BOT_TOKEN = '7353399540:AAHtYxx9ftGvs10iWXhvDSVPQgA4tDYKVEE'
 SCHEDULE_FILE = 'Plany.csv'
 logging.basicConfig(level=logging.INFO)
 
+user_groups: dict[int, int] = {}
+
 USER_SCHEDULES_DIR = "user_schedules"
 
 if not os.path.exists(USER_SCHEDULES_DIR):
@@ -144,12 +141,19 @@ def get_main_keyboard(user_id: int) -> InlineKeyboardMarkup:
     notif_state = user_notifications.get(user_id, False)
     notif_text = "🔔 Напоминания ВКЛ" if notif_state else "🔕 Напоминания ВЫКЛ"
 
+    group_num = user_groups.get(user_id, 0)
+    if group_num == 0:
+        group_text = "👥 Фильтр: Все группы"
+    else:
+        group_text = f"👥 Фильтр: {group_num} группа"
+
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🗓️ Сегодня", callback_data="show_today"),
          InlineKeyboardButton(text="🗓️ Завтра", callback_data="show_tomorrow")],
         [InlineKeyboardButton(text="📅 На этот месяц", callback_data="show_month"),
          InlineKeyboardButton(text="📅 На след месяц", callback_data="show_next_month")],
         [InlineKeyboardButton(text=notif_text, callback_data="toggle_notifications")],
+        [InlineKeyboardButton(text=group_text, callback_data="toggle_group")],
         [InlineKeyboardButton(text="🔄 Обновить расписание", callback_data="update_schedule")]
     ])
 
@@ -254,17 +258,34 @@ def read_schedule(user_id: int) -> pd.DataFrame:
 
 
 # --- ФОРМАТИРОВАНИЕ РАСПИСАНИЯ ---
-def format_schedule(df: pd.DataFrame, title: str) -> str:
+def format_schedule(df: pd.DataFrame, title: str, user_id: int) -> str:
     if df.empty:
         return f"{title} пусто 📭"
 
+    # фильтр по группе
+    group_num = user_groups.get(user_id, 0)  # 0 = все группы
+    if group_num > 0 and "Grupy" in df.columns:
+        def belongs_to_group(grupa_val: str) -> bool:
+            if not isinstance(grupa_val, str):
+                return False
+            grupa_val = grupa_val.strip()
+            if "WykS" in grupa_val:  # лекция (для всех)
+                return True
+            return f"Cw{group_num}S" in grupa_val  # только если совпадает группа
+
+        df = df[df["Grupy"].apply(belongs_to_group)]
+
+    if df.empty:
+        return f"{title} (после фильтра) пусто 📭"
+
+    # остальное без изменений
     lines = [f"📅 {title}:\n"]
     days_map = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"]
 
     for date, group in df.groupby("Data_dt"):
         day_of_week = days_map[date.weekday()]
         lines.append(f"🗓️ {day_of_week}, {date:%d.%m.%Y}")
-        lines.append('')  # разделитель
+        lines.append('')
 
         group = group.copy()
         group['czas_od_dt'] = pd.to_datetime(group['Czas od'], format="%H:%M", errors='coerce')
@@ -274,14 +295,12 @@ def format_schedule(df: pd.DataFrame, title: str) -> str:
             lines.append(f"📖 {row['Zajecia']}")
             lines.append(f"🏫 {row['Sala']}")
 
-            # Добавляем комментарий только если он не пустой
             uwagi = str(row.get('Uwagi', '')).strip()
             if uwagi and uwagi.lower() != 'nan':
                 lines.append(f"📝 {uwagi}")
 
-            lines.append("")  # пустая строка между предметами
-
-        lines.append("")  # пустая строка между днями
+            lines.append("")
+        lines.append("")
 
     return "\n".join(lines)
 
@@ -292,7 +311,7 @@ async def get_schedule_data_for_day(date: datetime.date, user_id: int) -> str:
     if df.empty:
         return "❌ Ваш файл расписания не найден или пуст."
     day_df = df[df['Data_dt'] == date]
-    return format_schedule(day_df, f"Расписание на {date:%d.%m.%Y}")
+    return format_schedule(day_df, f"Расписание на {date:%d.%m.%Y}", user_id)
 
 
 # --- ОБРАБОТЧИКИ ---
@@ -312,7 +331,7 @@ async def handle_file_upload(message: Message):
     user_id = message.from_user.id
     document = message.document
 
-    if document.file_name.endswith('.csv'):
+    if document.file_name.lower().endswith('.csv'):
         try:
             file = await bot.get_file(document.file_id)
             file_path = get_user_schedule_file(user_id)
@@ -383,6 +402,22 @@ async def process_update(callback: types.CallbackQuery, state: FSMContext):
     await state.set_state(ScheduleStates.waiting_for_url)
 
 
+@dp.callback_query(F.data == "toggle_group")
+async def toggle_group(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    current_group = user_groups.get(user_id, 0)
+
+    # переключаем 0 -> 1 -> 2 -> 3 -> снова 0
+    new_group = (current_group + 1) % 4
+    user_groups[user_id] = new_group
+
+    keyboard = get_main_keyboard(user_id)
+    await callback.message.edit_reply_markup(reply_markup=keyboard)
+
+    group_text = "Все группы" if new_group == 0 else f"{new_group} группа"
+    await callback.answer(f"Фильтр установлен: {group_text}")
+
+
 # Получение ссылки
 @dp.message(ScheduleStates.waiting_for_url)
 async def get_schedule_url(message: types.Message, state: FSMContext):
@@ -422,7 +457,6 @@ async def get_schedule_url(message: types.Message, state: FSMContext):
         await status_message.edit_text(f"❌ Ошибка при загрузке расписания:\n{e}")
 
     await state.clear()
-
 
 
 @dp.callback_query(F.data == "toggle_notifications")
