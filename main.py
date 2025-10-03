@@ -16,6 +16,22 @@ class ScheduleStates(StatesGroup):
     waiting_for_url = State()
 
 
+def parse_group_info(grupa_val: str) -> str:
+    if not isinstance(grupa_val, str):
+        return ""
+    grupa_val = grupa_val.strip()
+    if "WykS" in grupa_val:
+        return "Wykład"
+    elif "Cw" in grupa_val:
+        import re
+        match = re.search(r"Cw(\d+)S", grupa_val)
+        if match:
+            return f"Ćwiczenia (grupa {match.group(1)})"
+        else:
+            return "Ćwiczenia"
+    return grupa_val
+
+
 async def download_schedule(url: str, save_path: str) -> str:
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)  # Headless
@@ -291,7 +307,9 @@ def format_schedule(df: pd.DataFrame, title: str, user_id: int) -> str:
         group['czas_od_dt'] = pd.to_datetime(group['Czas od'], format="%H:%M", errors='coerce')
 
         for _, row in group.sort_values(by='czas_od_dt').iterrows():
+            zajecia_type = parse_group_info(row.get("Grupy", ""))
             lines.append(f"⏰ {row['Czas od']} - {row['Czas do']}")
+            lines.append(f"👥 {zajecia_type}")
             lines.append(f"📖 {row['Zajecia']}")
             lines.append(f"🏫 {row['Sala']}")
 
