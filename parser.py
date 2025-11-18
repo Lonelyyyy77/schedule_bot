@@ -1,8 +1,6 @@
 import asyncio
 from playwright.async_api import async_playwright
 import logging
-import asyncio
-from playwright.async_api import async_playwright
 
 
 URL = "https://harmonogramy.dsw.edu.pl/Plany/PlanyTokow/1178"
