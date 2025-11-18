@@ -6,8 +6,7 @@ from .config import BOT_TOKEN
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-# импортируем handlers после создания dp, чтобы декораторы могли использовать dp
-from . import handlers  # noqa: E402, F401
+from . import handlers
 
 from .notifier import send_notifications
 
