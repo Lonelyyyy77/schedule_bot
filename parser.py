@@ -89,7 +89,7 @@ async def main():
 
         download = await download_info.value
         await download.save_as("schedule.csv")
-        print("CSV файл сохранён как schedule.csv")
+        print("CSV файл сохранён")
 
         await browser.close()
 
