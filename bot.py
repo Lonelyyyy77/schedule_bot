@@ -13,6 +13,5 @@ from .notifier import send_notifications
 
 async def main():
     logging.info("Starting bot...")
-    # запустить фоновую задачу уведомлений
     asyncio.create_task(send_notifications(bot))
     await dp.start_polling(bot)
