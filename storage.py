@@ -3,7 +3,6 @@ from typing import Dict
 from .config import USER_SCHEDULES_DIR
 
 
-# Хранилище данных в памяти (простое)
 user_groups: Dict[int, int] = {}
 user_notifications: Dict[int, bool] = {}
 
