@@ -1,6 +1,11 @@
 import asyncio
 from playwright.async_api import async_playwright
 import logging
+import asyncio
+from playwright.async_api import async_playwright
+
+
+URL = "https://harmonogramy.dsw.edu.pl/Plany/PlanyTokow/1178"
 
 
 async def download_schedule(url: str, save_path: str) -> str:
@@ -53,10 +58,7 @@ async def download_schedule(url: str, save_path: str) -> str:
 
         await browser.close()
         return save_path
-import asyncio
-from playwright.async_api import async_playwright
 
-URL = "https://harmonogramy.dsw.edu.pl/Plany/PlanyTokow/1178"
 
 async def main():
     async with async_playwright() as p:
