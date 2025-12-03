@@ -94,4 +94,5 @@ async def main():
         await browser.close()
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
