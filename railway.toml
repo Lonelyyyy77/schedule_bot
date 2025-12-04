@@ -1,12 +1,7 @@
 [build]
 builder = "NIXPACKS"
-
-buildCommand = """
-python -m pip install -r requirements.txt &&
-python -m playwright install &&
-python -m playwright install-deps
-"""
+buildCommand = "python -m pip install -r requirements.txt && python -m playwright install && python -m playwright install-deps"
 
 [deploy]
-preDeployCommand = "python -m playwright install && python -m playwright install-deps"
+preDeployCommand = "python -m playwright install"
 startCommand = "python bot.py"
