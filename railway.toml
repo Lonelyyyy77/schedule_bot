@@ -1,7 +1,6 @@
 [build]
 builder = "NIXPACKS"
 
-# Устанавливаем зависимости Python + Playwright + системные зависимости Chromium
 buildCommand = """
 python -m pip install -r requirements.txt &&
 python -m playwright install &&
@@ -9,16 +8,5 @@ python -m playwright install-deps
 """
 
 [deploy]
-# Дублировать playwright install полезно — Railway иногда сбрасывает окружение
-preDeployCommand = [
-  "python -m playwright install",
-  "python -m playwright install-deps"
-]
-
-
-# Запуск твоего бота
+preDeployCommand = "python -m playwright install && python -m playwright install-deps"
 startCommand = "python bot.py"
-
-#healthcheckPath = "/"
-#healthcheckTimeout = 100
-#restartPolicyType = "always"
