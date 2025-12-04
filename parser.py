@@ -1,99 +1,97 @@
 import asyncio
 from playwright.async_api import async_playwright
 import logging
-
-
-URL = "https://harmonogramy.dsw.edu.pl/Plany/PlanyTokow/1178"
+import random
 
 
 async def download_schedule(url: str, save_path: str) -> str:
+    logging.info("▶ Старт скачивания расписания")
+
+    chromium_args = [
+        "--disable-dev-shm-usage",
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-gpu",
+        "--disable-web-security",
+        "--disable-features=IsolateOrigins,site-per-process",
+        "--disable-blink-features=AutomationControlled",
+    ]
+
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
+        browser = await p.chromium.launch(
+            headless=True,
+            args=chromium_args
+        )
 
-        await page.goto(url, timeout=60000)
+        context = await browser.new_context(
+            user_agent=f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                       f"(KHTML, like Gecko) Chrome/{random.randint(110, 121)} Safari/537.36"
+        )
 
-        # cookies
+        page = await context.new_page()
+
+        # Загружаем страницу
+        await page.goto(url, wait_until="networkidle", timeout=120000)
+
+        # Пробуем нажать кнопку cookies
         try:
-            await page.click("button:has-text('Zezwól')", timeout=5000)
-        except Exception:
-            pass
+            await page.locator("button:has-text('Zezwól')").click(timeout=3000)
+            logging.info("Cookies приняты")
+        except:
+            logging.info("Кнопки cookies нет")
 
-        # wybór "Cały semestr"
+        # Выбор фильтра
         try:
-            labels = await page.query_selector_all("label.custom-control-label")
-            for lbl in labels:
-                text = (await lbl.inner_text()).strip()
+            labels = page.locator("label.custom-control-label")
+            count = await labels.count()
+            for i in range(count):
+                text = (await labels.nth(i).inner_text()).strip()
                 if text == "Cały semestr":
-                    await lbl.click()
+                    await labels.nth(i).click()
+                    logging.info("Выбран фильтр Cały semestr")
                     break
         except Exception as e:
-            logging.debug("Ошибка при выборе фильтра: %s", e)
+            logging.error(f"Ошибка выбора фильтра: {e}")
 
-        # ⚠️ ПРАВИЛЬНАЯ КНОПКА — #Szukaj
+        # Кнопка поиска ("Szukaj")
         try:
-            await page.wait_for_selector("#Szukaj", timeout=60000)
-            await page.click("#Szukaj")
+            button = page.locator("#SzukajLogout")
+            await button.wait_for(state="visible", timeout=90000)
+            try:
+                await button.click()
+            except:
+                # fallback на JS
+                await button.evaluate("el => el.click()")
+
+            logging.info("Кнопка Szukaj нажата")
         except Exception as e:
-            logging.exception("Ошибка при клике Szukaj: %s", e)
+            logging.error(f"❌ Ошибка при клике Szukaj: {e}")
             await page.screenshot(path="debug_szukaj.png")
             await browser.close()
             raise
 
-        await asyncio.sleep(5)
+        # Даем сайту сформировать файл
+        await asyncio.sleep(4)
 
-        # скачивание CSV
+        # Скачивание CSV
         try:
-            link = await page.wait_for_selector("a[href*='WydrukTokuCsv']:visible", timeout=60000)
-            async with page.expect_download(timeout=120000) as download_info:
-                await link.click()
+            link = page.locator("a[href*='WydrukTokuCsv']")
+            await link.wait_for(state="visible", timeout=120000)
 
-            download = await download_info.value
+            async with page.expect_download(timeout=180000) as dl:
+                try:
+                    await link.click()
+                except:
+                    await link.evaluate("el => el.click()")
+
+            download = await dl.value
             await download.save_as(save_path)
+            logging.info("CSV успешно скачан")
         except Exception as e:
-            logging.exception("Ошибка при скачивании CSV: %s", e)
+            logging.error(f"❌ Ошибка при скачивании CSV: {e}")
             await page.screenshot(path="debug_download.png")
             await browser.close()
             raise
 
         await browser.close()
         return save_path
-
-
-async def main():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-
-        await page.goto(URL)
-        print("Страница открыта")
-
-        try:
-            await page.click("button:has-text('Zezwól')")
-            print("Куки приняты")
-        except:
-            print("Куки уже приняты")
-
-        labels = await page.query_selector_all("label.custom-control-label")
-        for lbl in labels:
-            text = (await lbl.inner_text()).strip()
-            if text == "Cały semestr":
-                await lbl.click()
-                print("Фильтр выбран")
-                break
-
-        await page.click("#Szukaj")
-        print("Нажата кнопка Szukaj")
-
-        async with page.expect_download() as download_info:
-            await page.click("a[href*='WydrukTokuCsv']")
-
-        download = await download_info.value
-        await download.save_as("schedule.csv")
-        print("CSV файл сохранён")
-
-        await browser.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
