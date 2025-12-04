@@ -5,3 +5,4 @@ chardet~=5.2.0
 dotenv~=0.9.9
 python-dotenv~=1.2.1
 playwright-stealth==1.0.6
+setuptools
