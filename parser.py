@@ -24,8 +24,11 @@ async def download_schedule(url: str, save_path: str) -> str:
         )
 
         context = await browser.new_context(
-            user_agent=f"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                       f"(KHTML, like Gecko) Chrome/{random.randint(110, 121)} Safari/537.36"
+        user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                   "AppleWebKit/537.36 (KHTML, like Gecko) "
+                   "Chrome/120.0.0.0 Safari/537.36",
+        viewport={"width": 1280, "height": 800},
+        java_script_enabled=True,
         )
 
         page = await context.new_page()
