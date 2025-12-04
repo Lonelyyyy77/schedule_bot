@@ -100,8 +100,9 @@ async def download_schedule(url: str, save_path: str) -> str:
         for i in range(30):  # максимум 30 секунд
             await asyncio.sleep(1)
             html_now = len(await page.content())
+            logging.info(f"html before = {html_before} and html now = {html_now}")
         
-            if html_now - html_before > 25000:
+            if html_now > html_before:
                 loaded = True
                 logging.info("Таблица загружена полностью")
                 break
