@@ -36,58 +36,80 @@ async def download_schedule(url: str, save_path: str) -> str:
         page = await context.new_page()
         await stealth_async(page)
 
-        # Загружаем страницу (только load!)
+        # --- Загружаем страницу ---
+        logging.info("Открываем страницу...")
         try:
             await page.goto(url, wait_until="load", timeout=120000)
-        except:
+        except Exception:
             await page.screenshot(path="debug_goto_failed.png")
             raise Exception("❌ Сайт не загрузился — вероятная блокировка серверного IP")
 
-        # Проверяем, есть ли вообще HTML
+        # --- Проверяем, что HTML не пустой ---
         html = await page.content()
-        if len(html) < 50000:  # обычно >400k
+        if len(html) < 50000:
             await page.screenshot(path="debug_empty_html.png")
             raise Exception("❌ Страница загрузилась частично — сайт блокирует headless браузер")
 
-        # Cookie button
+        # --- Cookies ---
         try:
             await page.locator("button:has-text('Zezwól')").click(timeout=3000)
             logging.info("Cookies приняты")
         except:
-            logging.info("Куки отсутствуют")
+            logging.info("Cookies нет")
 
-        # Фильтр: Cały semestr
+        # --- Фильтр: Cały semestr ---
         try:
             labels = page.locator("label.custom-control-label")
-            for i in range(await labels.count()):
+            count = await labels.count()
+
+            for i in range(count):
                 text = (await labels.nth(i).inner_text()).strip()
                 if text == "Cały semestr":
                     await labels.nth(i).click()
-                    logging.info("Фильтр установлен")
+                    logging.info("Выбран фильтр Cały semestr")
                     break
         except Exception as e:
             logging.error(f"Ошибка выбора фильтра: {e}")
 
-        # Кнопка Szukaj
+        # --- Кнопка Szukaj ---
         try:
             button = page.locator("#SzukajLogout")
-
-            await button.wait_for(state="visible", timeout=70000)
+            await button.wait_for(state="visible", timeout=90000)
 
             try:
                 await button.click()
             except:
                 await button.evaluate("el => el.click()")
 
-            logging.info("Кнопка Szukaj нажата")
+            logging.info("Нажата кнопка Szukaj")
         except Exception as e:
             await page.screenshot(path="debug_szukaj.png")
             raise Exception(f"❌ Ошибка клика Szukaj: {e}")
 
-        # Ждем подготовки CSV
-        await asyncio.sleep(5)
+        # ============================================================
+        # 🔥 Новый блок: ждём, пока таблица ОБНОВИТСЯ после фильтра
+        # ============================================================
 
-        # Скачивание CSV
+        logging.info("Ожидание полной загрузки расписания...")
+
+        html_before = len(html)
+
+        loaded = False
+        for i in range(30):  # максимум 30 секунд
+            await asyncio.sleep(1)
+            html_now = len(await page.content())
+
+            if html_now - html_before > 15000:
+                loaded = True
+                logging.info("Таблица загружена полностью")
+                break
+
+        if not loaded:
+            logging.warning("Таблица могла не успеть обновиться. Все равно продолжаем.")
+
+        # ============================================================
+
+        # --- Скачивание CSV ---
         try:
             link = page.locator("a[href*='WydrukTokuCsv']")
             await link.wait_for(state="visible", timeout=120000)
@@ -100,8 +122,8 @@ async def download_schedule(url: str, save_path: str) -> str:
 
             download = await dl.value
             await download.save_as(save_path)
-            logging.info("CSV скачан успешно")
 
+            logging.info("CSV скачан УСПЕШНО")
         except Exception as e:
             await page.screenshot(path="debug_download.png")
             raise Exception(f"❌ Ошибка скачивания CSV: {e}")
