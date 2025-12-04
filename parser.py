@@ -90,18 +90,28 @@ async def download_schedule(url: str, save_path: str) -> str:
         # 🔥 Новый блок: ждём, пока таблица ОБНОВИТСЯ после фильтра
         # ============================================================
 
-        logging.info("Ожидание полной загрузки расписания...")
+        previous_len = 0
+        stable_count = 0      # сколько раз подряд не менялся HTML
+        STABLE_LIMIT = 3      # 3 секунды стабильности = страница загружена
 
-        html_before = len(html)
-
-        loaded = False
-        for i in range(30):  # максимум 30 секунд
+        logging.info("Ожидание полной загрузки таблицы...")
+        
+        while True:
             await asyncio.sleep(1)
             html_now = len(await page.content())
-
-            if html_now - html_before > 15000:
-                loaded = True
-                logging.info("Таблица загружена полностью")
+        
+            # если размер HTML изменился → страница ещё грузится
+            if html_now != previous_len:
+                logging.info(f"Изменение HTML: {previous_len} → {html_now}")
+                previous_len = html_now
+                stable_count = 0  # сбрасываем стабильность
+            else:
+                stable_count += 1
+                logging.info(f"HTML стабилен {stable_count}/{STABLE_LIMIT}")
+        
+            # HTML не меняется STABLE_LIMIT секунд → загрузка закончилась
+            if stable_count >= STABLE_LIMIT:
+                logging.info("Таблица полностью обновилась!")
                 break
 
         if not loaded:
