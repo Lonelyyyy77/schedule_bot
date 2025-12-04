@@ -72,6 +72,8 @@ async def download_schedule(url: str, save_path: str) -> str:
             logging.error(f"Ошибка выбора фильтра: {e}")
 
         # --- Кнопка Szukaj ---
+        html_before = len(await page.content())
+        
         try:
             button = page.locator("#SzukajLogout")
             await button.wait_for(state="visible", timeout=90000)
