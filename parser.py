@@ -82,6 +82,9 @@ async def download_schedule(url: str, save_path: str) -> str:
                 await button.evaluate("el => el.click()")
 
             logging.info("Нажата кнопка Szukaj")
+
+            await asyncio.sleep(22)
+            
         except Exception as e:
             await page.screenshot(path="debug_szukaj.png")
             raise Exception(f"❌ Ошибка клика Szukaj: {e}")
@@ -89,31 +92,18 @@ async def download_schedule(url: str, save_path: str) -> str:
         # ============================================================
         # 🔥 Новый блок: ждём, пока таблица ОБНОВИТСЯ после фильтра
         # ============================================================
-
-        previous_len = 0
-        stable_count = 0      # сколько раз подряд не менялся HTML
-        STABLE_LIMIT = 3      # 3 секунды стабильности = страница загружена
-
-        logging.info("Ожидание полной загрузки таблицы...")
         
-        while True:
+        loaded = False
+        
+        for i in range(30):  # максимум 30 секунд
             await asyncio.sleep(1)
             html_now = len(await page.content())
         
-            # если размер HTML изменился → страница ещё грузится
-            if html_now != previous_len:
-                logging.info(f"Изменение HTML: {previous_len} → {html_now}")
-                previous_len = html_now
-                stable_count = 0  # сбрасываем стабильность
-            else:
-                stable_count += 1
-                logging.info(f"HTML стабилен {stable_count}/{STABLE_LIMIT}")
-        
-            # HTML не меняется STABLE_LIMIT секунд → загрузка закончилась
-            if stable_count >= STABLE_LIMIT:
-                logging.info("Таблица полностью обновилась!")
+            if html_now - html_before > 25000:
+                loaded = True
+                logging.info("Таблица загружена полностью")
                 break
-
+        
         if not loaded:
             logging.warning("Таблица могла не успеть обновиться. Все равно продолжаем.")
 
