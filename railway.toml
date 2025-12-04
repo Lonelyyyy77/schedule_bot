@@ -15,6 +15,7 @@ preDeployCommand = [
   "python -m playwright install-deps"
 ]
 
+
 # Запуск твоего бота
 startCommand = "python bot.py"
 
