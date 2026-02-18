@@ -1,14 +1,14 @@
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
-from .config import BOT_TOKEN
+from config import BOT_TOKEN
 
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
-from . import handlers
+import handlers
 
-from .notifier import send_notifications
+from notifier import send_notifications
 
 
 async def main():
